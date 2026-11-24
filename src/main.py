@@ -13,9 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config import SEARCH_QUERIES
 from src.models import Job, SourceResult, dedup, save_json
-from src.matcher import rank
+from src.matcher import rank, grade
 from src.reporter import write_outputs
 from src.scrapers import zhilian, liepin, boss, linkedin, search
+from src.dashboard import build_index_html
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HISTORY_PATH = os.path.join(ROOT, "data", "history.json")
@@ -63,23 +64,41 @@ def main():
     ranked = rank(jobs, top_n=60)
     print(f"评分完成，Top1：{ranked[0].title if ranked else '无'} / {ranked[0].match_score if ranked else 0}")
 
-    # 3) 历史对比（新增岗位）
+    # 3) 历史对比（当日新增 = 今天首次发现的岗位，与当天运行几次无关）
     history = load_history()
     new_keys = set()
     for j in ranked:
         if j.key not in history:
-            new_keys.add(j.key)
             history[j.key] = {"first_seen": today, "title": j.title, "company": j.company}
-    # 更新 last_seen
-    for j in ranked:
-        if j.key in history:
-            history[j.key]["last_seen"] = today
+        # 当天首次发现的岗位都算"今日新增"，避免一天内多次运行时新增数被清零
+        if history[j.key].get("first_seen") == today:
+            new_keys.add(j.key)
+        # 更新 last_seen
+        history[j.key]["last_seen"] = today
     save_json(HISTORY_PATH, history)
 
     # 4) 落盘 + README
     write_outputs(ROOT, ranked, source_results, today, new_keys, len(history), leads=leads)
+
+    # 5) 前端看板数据 + 首页
+    latest = {
+        "date": today,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "total": len(ranked),
+        "new_count": len(new_keys),
+        "history_count": len(history),
+        "grade_a": sum(1 for j in ranked if j.match_score >= 75),
+        "grade_b": sum(1 for j in ranked if 60 <= j.match_score < 75),
+        "sources": [r.to_dict() for r in source_results],
+        "new_jobs": [j.to_dict() for j in ranked if j.key in new_keys],
+        "jobs": [j.to_dict() for j in ranked],
+    }
+    save_json(os.path.join(ROOT, "data", "latest.json"), latest)
+    with open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8") as f:
+        f.write(build_index_html(latest))
     print(f"\n完成：新增 {len(new_keys)} 条，累计 {len(history)} 条")
     print(f"README: {os.path.join(ROOT, 'README.md')}")
+    print(f"Dashboard: {os.path.join(ROOT, 'index.html')}")
 
 
 if __name__ == "__main__":
