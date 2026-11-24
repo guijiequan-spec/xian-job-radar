@@ -1,0 +1,52 @@
+name: 每日岗位采集与匹配
+
+on:
+  schedule:
+    # UTC 时间。北京时间 = UTC+8。每天北京时间 09:00 = UTC 01:00
+    - cron: '0 1 * * *'
+    # 每天北京时间 18:00 = UTC 10:00（晚间补充一次）
+    - cron: '0 10 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-job-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 运行采集与匹配
+        run: python src/main.py
+
+      - name: 提交更新
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "无变更，跳过提交"
+          else
+            git commit -m "chore: 每日岗位数据更新 $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: 汇总日志
+        if: always()
+        run: |
+          echo "=== 采集源文件状态 ==="
+          grep -h "状态=" /dev/null 2>/dev/null || true
+          echo "=== 数据文件 ==="
+          ls -la data/daily/ 2>/dev/null | tail -5 || true
