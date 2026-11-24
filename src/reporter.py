@@ -63,6 +63,8 @@ def build_readme(jobs, source_results, today, history_count, leads=None):
         "",
         f"**最近更新**：{today} ｜ **累计去重岗位**：{history_count} 条 ｜ **本次采集**：{len(jobs)} 条 ｜ **高度匹配(A)**：{a_cnt} 条 ｜ **较匹配(B)**：{b_cnt} 条",
         "",
+        "> ⚙️ **自动更新激活状态**：代码已就位，首次启用需补一次 `workflow` 权限（约1分钟）。见 [启用自动更新.md](启用自动更新.md)。激活后每天北京时间 09:00 / 18:00 自动更新。",
+        "",
         "## 匹配画像",
         "",
         "- 15年HR管理 + 港股上市招聘平台（猎聘）大数据研究院副院长",
